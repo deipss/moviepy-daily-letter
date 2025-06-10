@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 BACKGROUND_IMAGE_PATH = "temp/generated_background.png"
 GLOBAL_WIDTH = 1920
 GLOBAL_HEIGHT = 1080
-GAP = int(GLOBAL_WIDTH * 0.02)
+GAP = int(GLOBAL_WIDTH * 0.04)
 INNER_WIDTH = GLOBAL_WIDTH - GAP
 INNER_HEIGHT = GLOBAL_HEIGHT - GAP
 W_H_RADIO = "{:.2f}".format(GLOBAL_WIDTH / GLOBAL_HEIGHT)
@@ -26,8 +26,6 @@ MAIN_COLOR = "##0099CC"
 MAIN_BG_COLOR = "#FFFFFF"
 VIDEO_FILE_NAME = "video.mp4"
 MATERIAL_PATH = 'material'
-
-import time
 
 REWRITE = False
 
@@ -41,18 +39,11 @@ def build_video_path(idx: str, name: str):
 
 
 def build_audio_path(idx: str, name: str):
-    return os.path.join(MATERIAL_PATH, idx, 'audio_' + name + '.mp4')
+    return os.path.join(MATERIAL_PATH, idx, 'audio_' + name + '.mp3')
 
 
 def build_video_img_path(idx: str, img_name: str):
     return os.path.join(MATERIAL_PATH, idx, img_name)
-
-
-def check_orientation_horizontal_screen_by_path(image_path):
-    with Image.open(image_path) as img:
-        width, height = img.size
-    aspect_ratio = width / height
-    return aspect_ratio > 1
 
 
 def check_orientation_horizontal_screen_by_img(img):
@@ -169,10 +160,22 @@ def calculate_segment_times(duration, num_segments):
     return segment_times
 
 
+def generate_audio(text: str, output_file: str = "audio.wav", rewrite=False) -> None:
+    if os.path.exists(output_file) and not rewrite:
+        logger.info(f"{output_file}已存在，跳过生成音频。")
+        return
+    logger.info(f"{output_file}开始生成音频: {text}")
+    rate = 50
+    sh = f'edge-tts --voice zh-CN-YunxiNeural --text "{text}" --write-media {output_file} --rate="+{rate}%"'
+    os.system(sh)
+
+
 def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: str,
                                 is_preview=False):
+    # 合成最终视频
+    image_clip_list = []
     # 计算各区域尺寸
-    title_height = INNER_HEIGHT * 0.15
+    title_height = INNER_HEIGHT * 0.1
     top_height_ratio = 0.85
     top_height = int((INNER_HEIGHT - title_height) * top_height_ratio)
     bottom_height = INNER_HEIGHT - top_height - title_height
@@ -180,26 +183,90 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
 
     # 加载背景和音频
     bg_clip = ColorClip(size=(INNER_WIDTH, INNER_HEIGHT), color=(255, 255, 255))  # 白色背景
-    communicate = Communicate(text=audio_txt, voice="zh-CN-YunyangNeural")
     audio_temp_path = build_audio_path(idx, title)
-    communicate.save(audio_temp_path)
+    generate_audio(audio_txt, output_file=audio_temp_path)
     audio_clip = AudioFileClip(audio_temp_path)
     duration = audio_clip.duration
+    logger.info(f"audio_clip.duration={duration}")
     bg_clip = bg_clip.with_duration(duration).with_audio(audio_clip)
 
     # 图片处理
-
     all_img_len = len(image_list)
 
     if all_img_len == 1:
-        first_img = image_list[0]
+        img_path = build_video_img_path(idx, image_list[0]['src'])
+        img_clip = ImageClip(img_path)
+        alr = image_list[0]['alr']
+        scale = min(INNER_WIDTH * 0.5 / img_clip.w, top_height / img_clip.h)
+        img_clip = img_clip.resized(scale)
+        img_clip = img_clip.with_position((0.02, 0.11), relative=True).with_duration(duration)
 
+        box_w = (INNER_WIDTH - img_clip.w) // 10 * 8
+        box_h = img_clip.h
+        font_size, chars_per_line = calculate_font_size_and_line_length(alr, box_w,
+                                                                        box_h)
+        alr = '\n'.join([alr[i:i + chars_per_line] for i in range(0, len(alr), chars_per_line)])
+        alr_cip = TextClip(
+            text=alr,
+            interline=font_size // 2,
+            font_size=font_size,
+            color='black',
+            font='./font/simhei.ttf',
+            text_align='left',
+            size=(box_w, box_h),
+            method='caption'
+        ).with_duration(duration).with_position((int(img_clip.w+INNER_WIDTH*0.03), int(INNER_HEIGHT*0.12)))
+        image_clip_list.append(img_clip)
+        image_clip_list.append(alr_cip)
 
+    if all_img_len == 2:
+        img_path = build_video_img_path(idx, image_list[0]['src'])
+        img_clip = ImageClip(img_path)
+        alr = image_list[0]['alr']
+        scale = min(INNER_WIDTH * 0.48 / img_clip.w, top_height * 0.8 / img_clip.h)
+        img_clip = img_clip.resized(scale)
+        img_clip = img_clip.with_position((0.03, 0.11), relative=True).with_duration(duration)
 
+        box_w = int(INNER_WIDTH * 0.45)
+        box_h = int(img_clip.h * 0.3)
+        font_size, chars_per_line = calculate_font_size_and_line_length(alr, box_w, box_h)
+        alr = '\n'.join([alr[i:i + chars_per_line] for i in range(0, len(alr), chars_per_line)])
+        alr_cip = TextClip(
+            text=alr,
+            interline=font_size // 2,
+            font_size=font_size,
+            color='black',
+            font='./font/simhei.ttf',
+            text_align='left',
+            size=(box_w, box_h),
+            method='caption'
+        ).with_duration(duration).with_position((0.03, 0.75), relative=True)
+        image_clip_list.append(img_clip)
+        image_clip_list.append(alr_cip)
 
+        img_path = build_video_img_path(idx, image_list[1]['src'])
+        img_clip = ImageClip(img_path)
+        alr = image_list[1]['alr']
+        scale = min(INNER_WIDTH * 0.48 / img_clip.w, top_height * 0.8 / img_clip.h)
+        img_clip = img_clip.resized(scale)
+        img_clip = img_clip.with_position((0.52, 0.11), relative=True).with_duration(duration)
 
-
-
+        box_w = int(INNER_WIDTH * 0.45)
+        box_h = int(img_clip.h * 0.3)
+        font_size, chars_per_line = calculate_font_size_and_line_length(alr, box_w, box_h)
+        alr = '\n'.join([alr[i:i + chars_per_line] for i in range(0, len(alr), chars_per_line)])
+        alr_cip = TextClip(
+            text=alr,
+            interline=font_size // 2,
+            font_size=font_size,
+            color='black',
+            font='./font/simhei.ttf',
+            text_align='left',
+            size=(box_w, box_h),
+            method='caption'
+        ).with_duration(duration).with_position((0.52, 0.75), relative=True)
+        image_clip_list.append(img_clip)
+        image_clip_list.append(alr_cip)
 
     # 标题
     title_font_size = int(title_height * 0.9)
@@ -212,10 +279,8 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
         method='label'
     ).with_duration(duration).with_position(('left', 'top'))
 
-    # 合成最终视频
-    image_clip_list = []
     image_clip_list.insert(0, bg_clip)
-    image_clip_list.insert(3, top_title)
+    image_clip_list.insert(1, top_title)
     final_video = CompositeVideoClip(clips=image_clip_list, size=(INNER_WIDTH, INNER_HEIGHT))
     if is_preview:
         final_video.preview()
@@ -258,8 +323,6 @@ def get_weekday_color():
     return weekday_color_map[weekday]
 
 
-
-
 import argparse
 
 if __name__ == "__main__":
@@ -285,4 +348,13 @@ if __name__ == "__main__":
         REWRITE = True
         logger.info("指定强制重写")
 
-    # combine_videos(today=args.today)
+    generate_three_layout_video(
+        "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
+
+        [
+            {
+                'src': 'img_6.png',
+                'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
+            }
+
+        ], "背景", "1", True)
