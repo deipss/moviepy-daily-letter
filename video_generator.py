@@ -7,69 +7,58 @@ import os
 import math
 from PIL import Image
 from moviepy.video.fx import Loop
-from crawl_news import generate_audio
-from crawl_news import FINAL_VIDEOS_FOLDER_NAME, PROCESSED_NEWS_JSON_FILE_NAME, CN_NEWS_FOLDER_NAME, EVENING_TAG, \
-    AUDIO_FILE_NAME, CHINADAILY, BBC, NewsArticle
 from ollama_client import OllamaClient
 from logging_config import logger
 import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-BACKGROUND_IMAGE_PATH = "videos/generated_background.png"
+BACKGROUND_IMAGE_PATH = "temp/generated_background.png"
 GLOBAL_WIDTH = 1920
 GLOBAL_HEIGHT = 1080
 GAP = int(GLOBAL_WIDTH * 0.02)
 INNER_WIDTH = GLOBAL_WIDTH - GAP
 INNER_HEIGHT = GLOBAL_HEIGHT - GAP
-W_H_RADIO = GLOBAL_WIDTH / GLOBAL_HEIGHT
-W_H_RADIO = "{:.2f}".format(W_H_RADIO)
+W_H_RADIO = "{:.2f}".format(GLOBAL_WIDTH / GLOBAL_HEIGHT)
 FPS = 40
-MAIN_BG_COLOR = "#FF9900"
+MAIN_COLOR = "#FF9900"
+MAIN_BG_COLOR = "#FFFFFF"
 VIDEO_FILE_NAME = "video.mp4"
-
-logger.info(
-    f"GLOBAL_WIDTH:{GLOBAL_WIDTH}\nGLOBAL_HEIGHT:{GLOBAL_HEIGHT}\n W_H_RADIO:{W_H_RADIO}\n  FPS:{FPS}\n  BACKGROUND_IMAGE_PATH:{BACKGROUND_IMAGE_PATH}\nGAP:{GAP}\nINNER_WIDTH:{INNER_WIDTH}\nINNER_HEIGHT:{INNER_HEIGHT}")
+MATERIAL_PATH = 'material'
 
 import time
 
 REWRITE = False
-EVENING = False
 
 
-def build_today_introduction_path(today=datetime.now().strftime("%Y%m%d")):
-    if EVENING:
-        return os.path.join(CN_NEWS_FOLDER_NAME, today, "introduction_evening.mp4")
-    return os.path.join(CN_NEWS_FOLDER_NAME, today, "introduction.mp4")
+def build_video_path(idx: str):
+    return os.path.join(MATERIAL_PATH, idx, VIDEO_FILE_NAME)
 
 
-def build_today_json_path(today=datetime.now().strftime("%Y%m%d")):
-    return os.path.join(CN_NEWS_FOLDER_NAME, today, "all.json")
+def build_video_img_path(idx: str, img_name: str):
+    return os.path.join(MATERIAL_PATH, idx, img_name)
 
 
-def build_today_introduction_audio_path(today=datetime.now().strftime("%Y%m%d")):
-    if EVENING:
-        return os.path.join(CN_NEWS_FOLDER_NAME, today, "introduction_evening.mp3")
-    return os.path.join(CN_NEWS_FOLDER_NAME, today, "introduction.mp3")
+def check_orientation_horizontal_screen_by_path(image_path):
+    with Image.open(image_path) as img:
+        width, height = img.size
+    aspect_ratio = width / height
+    return aspect_ratio > 1
 
 
-def build_today_final_video_path(today=datetime.now().strftime("%Y%m%d")):
-    if EVENING:
-        return os.path.join(FINAL_VIDEOS_FOLDER_NAME, today + "_" + EVENING_TAG + "_" + VIDEO_FILE_NAME)
-    return os.path.join(FINAL_VIDEOS_FOLDER_NAME, today + "_" + VIDEO_FILE_NAME)
+def check_orientation_horizontal_screen_by_img(img):
+    width, height = img.size
+    aspect_ratio = width / height
+    return aspect_ratio > 1
 
 
-def build_today_bg_music_path():
-    return os.path.join(CN_NEWS_FOLDER_NAME, "bg_music.mp4")
-
-
-def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, color=MAIN_BG_COLOR):
+def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, color=MAIN_COLOR):
     # 创建一个新的图像
     image = Image.new("RGB", (width, height), color)  # 橘色背景
     draw = ImageDraw.Draw(image)
 
     # 计算边框宽度(1%的宽度)
-    border_width = GAP*1.5
+    border_width = GAP * 1.5
 
     # 绘制圆角矩形(内部灰白色)
     draw.rounded_rectangle(
@@ -260,21 +249,19 @@ def get_full_date(today=datetime.now()):
     # 获取星期几
     weekday_map = ["一", "二", "三", "四", "五", "六", "日"]
     weekday = f"星期{weekday_map[today.weekday()]}"
-    if EVENING:
-        return "今天是{}, \n农历{}, \n{},欢迎收看晚间【今日快电】".format(solar_date, lunar_date, weekday)
     return "今天是{}, \n农历{}, \n{},欢迎收看【今日快电】".format(solar_date, lunar_date, weekday)
 
 
 def get_weekday_color():
     # 星期与颜色的映射关系 (0 = Monday, 6 = Sunday)
     weekday_color_map = {
-        0: 'Red',       # 周一 - 红色
-        1: 'Orange',    # 周二 - 橙色
-        2: 'Yellow',    # 周三 - 黄色
-        3: 'Green',     # 周四 - 绿色
-        4: 'Blue',      # 周五 - 蓝色
-        5: 'Purple',    # 周六 - 紫色
-        6: 'Pink'       # 周日 - 粉色
+        0: 'Red',  # 周一 - 红色
+        1: 'Orange',  # 周二 - 橙色
+        2: 'Yellow',  # 周三 - 黄色
+        3: 'Green',  # 周四 - 绿色
+        4: 'Blue',  # 周五 - 蓝色
+        5: 'Purple',  # 周六 - 紫色
+        6: 'Pink'  # 周日 - 粉色
     }
 
     # 获取当前星期几 (0=Monday, 6=Sunday)
@@ -282,6 +269,8 @@ def get_weekday_color():
 
     # 返回对应颜色
     return weekday_color_map[weekday]
+
+
 def generate_video_introduction(output_path='temp/introduction.mp4', today=datetime.now().strftime("%Y%m%d"),
                                 is_preview=False):
     """生成带日期文字和背景音乐的片头视频
@@ -301,8 +290,6 @@ def generate_video_introduction(output_path='temp/introduction.mp4', today=datet
     # 加载背景音乐
     date_obj = datetime.strptime(today, "%Y%m%d")
     date_text = get_full_date(date_obj)
-    audio_path = build_today_introduction_audio_path(today)
-    generate_audio(date_text, audio_path)
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
 
@@ -317,7 +304,7 @@ def generate_video_introduction(output_path='temp/introduction.mp4', today=datet
     txt_clip = TextClip(
         text=date_text,
         font_size=int(GLOBAL_WIDTH / max_length * 0.8),
-        color=MAIN_BG_COLOR,
+        color=MAIN_COLOR,
         font='./font/simhei.ttf',
         stroke_color='black',
         stroke_width=2
@@ -331,7 +318,7 @@ def generate_video_introduction(output_path='temp/introduction.mp4', today=datet
         color=get_weekday_color(),
         interline=int(GLOBAL_HEIGHT * 0.75 / 5 * 0.6) // 4,
         font='./font/simhei.ttf',
-        stroke_color=MAIN_BG_COLOR,
+        stroke_color=MAIN_COLOR,
         stroke_width=3
     ).with_duration(duration).with_position(('center', 0.1), relative=True)
 
@@ -374,12 +361,9 @@ def combine_videos_with_transitions(video_paths, output_path, topics, today):
 def combine_videos(today: str = datetime.now().strftime("%Y%m%d")):
     start_time = time.time()
     video_paths = []
-    intro_path = build_today_introduction_path(today)
     logger.info(f"正在生成视频{intro_path}...")
     topics, duration = generate_video_introduction(intro_path, today)
     video_paths.append(intro_path)
-    cn_paths = generate_all_news_video(source=CHINADAILY, today=today)
-    bbc_paths = generate_all_news_video(source=BBC, today=today)
     for i in range(max(len(bbc_paths), len(cn_paths))):
         if i < len(cn_paths):
             video_paths.append(cn_paths[i])
@@ -482,9 +466,12 @@ def test_generate_all():
     combine_videos_with_transitions(
         ['cn_news/20250512/intro.mp4', 'cn_news/20250512/0000/video.mp4', 'cn_news/20250512/0001/video.mp4'], 'a.mp4',
         '', today)
+
+
 def test_generate_video_introduction():
-    REWRITE=True
-    generate_video_introduction(today='20250606',is_preview=True)
+    REWRITE = True
+    generate_video_introduction(today='20250606', is_preview=True)
+
 
 def test_video_text_align():
     list = [
@@ -508,28 +495,23 @@ def test_video_text_align():
 import argparse
 
 if __name__ == "__main__":
-    logger.info("开始执行")
+    logger.info("=======================开始执行=========================")
 
     if not os.path.exists('temp'):
         os.mkdir('temp')
-    if not os.path.exists('videos'):
-        os.mkdir('videos')
     if not os.path.exists('final_videos'):
         os.mkdir('final_videos')
+    if not os.path.exists('material'):
+        os.mkdir('material')
 
-    parser = argparse.ArgumentParser(description="新闻视频生成工具")
+    logger.info(
+        f"GLOBAL_WIDTH:{GLOBAL_WIDTH}\nGLOBAL_HEIGHT:{GLOBAL_HEIGHT}\n W_H_RADIO:{W_H_RADIO}\n  FPS:{FPS}\n  BACKGROUND_IMAGE_PATH:{BACKGROUND_IMAGE_PATH}\nGAP:{GAP}\nINNER_WIDTH:{INNER_WIDTH}\nINNER_HEIGHT:{INNER_HEIGHT}")
+
+    parser = argparse.ArgumentParser(description="视频生成工具")
     parser.add_argument("--today", type=str, default=datetime.now().strftime("%Y%m%d"), help="指定日期")
-    parser.add_argument("--evening", type=bool, default=False, help="是否执行晚间任务")
     parser.add_argument("--rewrite", type=bool, default=False, help="是否重写")
     args = parser.parse_args()
     logger.info(f"新闻视频生成工具 参数args={args}")
-
-    # 示例：处理参数
-    if args.evening:
-        logger.info("执行晚间任务")
-        BBC = BBC + EVENING_TAG
-        EVENING = True
-        CHINADAILY = CHINADAILY + EVENING_TAG
 
     if args.rewrite:
         REWRITE = True
