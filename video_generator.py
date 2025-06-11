@@ -21,7 +21,7 @@ INNER_WIDTH = GLOBAL_WIDTH - GAP
 INNER_HEIGHT = GLOBAL_HEIGHT - GAP
 W_H_RADIO = "{:.2f}".format(GLOBAL_WIDTH / GLOBAL_HEIGHT)
 FPS = 40
-MAIN_COLOR = "##0099CC"
+MAIN_COLOR = "#0099CC"
 MAIN_BG_COLOR = "#FFFFFF"
 VIDEO_FILE_NAME = "video.mp4"
 MATERIAL_PATH = 'material'
@@ -45,12 +45,6 @@ def build_video_img_path(idx: str, img_name: str):
     return os.path.join(MATERIAL_PATH, idx, img_name)
 
 
-def check_orientation_horizontal_screen_by_img(img):
-    width, height = img.size
-    aspect_ratio = width / height
-    return aspect_ratio > 1
-
-
 def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, color=MAIN_COLOR):
     # 创建一个新的图像
     image = Image.new("RGB", (width, height), color)  # 橘色背景
@@ -63,7 +57,7 @@ def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, color=MA
     draw.rounded_rectangle(
         [(border_width, border_width), (width - border_width, height - border_width)],
         radius=40,  # 圆角半径
-        fill="#FCFEFE"  # 灰白色填充
+        fill=MAIN_BG_COLOR  # 灰白色填充
     )
 
     image.save(BACKGROUND_IMAGE_PATH)
@@ -71,24 +65,14 @@ def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, color=MA
 
 
 def add_newline_every_n_chars(text, n):
-    """
-    每隔固定的字数在文本中添加换行符
-
-    参数:
-    text (str): 需要添加换行符的长文本
-    n (int): 指定的固定字数
-
-    返回:
-    str: 添加换行符后的文本
-    """
     if n <= 0:
         return text
 
     return '\n'.join([text[i:i + n] for i in range(0, len(text), n)])
 
 
-def calculate_font_size_and_line_length(text, box_width, box_height, font_ratio=1.0, line_height_ratio=1.5,
-                                        start_size=72):
+def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, line_height_ratio=1.5,
+                                  start_size=72):
     """
     计算适合文本框的字体大小和每行字数
 
@@ -139,44 +123,27 @@ def truncate_after_find_period(text: str, end_pos: int = 400) -> str:
         return text  # 或返回 text[:end_pos] + "..."（按需选择）
 
 
-def calculate_segment_times(duration, num_segments):
-    """
-    将总时长分成若干段，并计算每段的开始和结束时间。
-
-    参数:
-    duration (float): 总时长（秒）
-    num_segments (int): 分段数量
-
-    返回:
-    list: 每段的开始和结束时间列表，格式为 [(start_time, end_time), ...]
-    """
-    segment_duration = duration / num_segments
-    segment_times = []
-    for i in range(num_segments):
-        start_time = i * segment_duration
-        end_time = (i + 1) * segment_duration
-        segment_times.append((start_time, end_time))
-    return segment_times
-
-
 def generate_audio(text: str, output_file: str = "audio.wav", rewrite=False) -> None:
-    if os.path.exists(output_file) and not rewrite:
-        logger.info(f"{output_file}已存在，跳过生成音频。")
+    if os.path.exists(output_file) and not REWRITE:
+        logger.warning(f"{output_file}已存在，跳过生成音频。")
         return
     logger.info(f"{output_file}开始生成音频: {text}")
     rate = 50
-    sh = f'edge-tts --voice zh-CN-YunxiNeural --text "{text}" --write-media {output_file} --rate="+{rate}%"'
+    sh = f'edge-tts --voice zh-CN-YunjianNeural --text "{text}" --write-media {output_file} --rate="+{rate}%"'
     os.system(sh)
 
 
 def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: str,
                                 is_preview=False):
+    video_path = build_video_path(idx, title)
+    if os.path.exists(video_path) and not REWRITE:
+        logger.warning(f"{video_path}已存在，跳过生成视频。")
+        return video_path
     # 合成最终视频
     image_clip_list = []
     # 计算各区域尺寸
-    title_height = INNER_HEIGHT * 0.1
-    top_height_ratio = 0.85
-    top_height = int((INNER_HEIGHT - title_height) * top_height_ratio)
+    title_height = int(INNER_HEIGHT * 0.08)
+    top_height = int(INNER_HEIGHT * 0.8)
     bottom_height = INNER_HEIGHT - top_height - title_height
     logger.info(f"title_height={title_height} - top_height={top_height} - bottom_height={bottom_height} ")
 
@@ -198,12 +165,11 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
         alr = image_list[0]['alr']
         scale = min(INNER_WIDTH * 0.5 / img_clip.w, top_height / img_clip.h)
         img_clip = img_clip.resized(scale)
-        img_clip = img_clip.with_position((0.02, 0.11), relative=True).with_duration(duration)
+        img_clip = img_clip.with_position((0.01, 0.09), relative=True).with_duration(duration)
 
-        box_w = (INNER_WIDTH - img_clip.w) // 10 * 8
+        box_w = int((INNER_WIDTH - img_clip.w) * 0.9)
         box_h = img_clip.h
-        font_size, chars_per_line = calculate_font_size_and_line_length(alr, box_w,
-                                                                        box_h)
+        font_size, chars_per_line = calculate_font_size_and_lines(alr, box_w, box_h)
         alr = '\n'.join([alr[i:i + chars_per_line] for i in range(0, len(alr), chars_per_line)])
         alr_cip = TextClip(
             text=alr,
@@ -213,57 +179,51 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
             font='./font/simhei.ttf',
             text_align='left',
             size=(box_w, box_h),
-            method='caption'
-        ).with_duration(duration).with_position((int(img_clip.w + INNER_WIDTH * 0.03), int(INNER_HEIGHT * 0.12)))
+            method='caption',
+        ).with_duration(duration).with_position((int(img_clip.w + INNER_WIDTH * 0.015), int(INNER_HEIGHT * 0.10)))
         image_clip_list.append(img_clip)
         image_clip_list.append(alr_cip)
 
     if all_img_len == 2:
         img_path = build_video_img_path(idx, image_list[0]['src'])
         img_clip = ImageClip(img_path)
-        alr = image_list[0]['alr']
-        scale = min(INNER_WIDTH * 0.48 / img_clip.w, top_height * 0.8 / img_clip.h)
+        scale = min(INNER_WIDTH * 0.49 / img_clip.w, top_height * 0.8 / img_clip.h)
         img_clip = img_clip.resized(scale)
-        img_clip = img_clip.with_position((0.03, 0.11), relative=True).with_duration(duration)
+        img_clip = img_clip.with_position((0.015, 0.09), relative=True).with_duration(duration)
 
-        box_w = int(INNER_WIDTH * 0.45)
-        box_h = int(img_clip.h * 0.3)
-        font_size, chars_per_line = calculate_font_size_and_line_length(alr, box_w, box_h)
-        alr = '\n'.join([alr[i:i + chars_per_line] for i in range(0, len(alr), chars_per_line)])
+        img_path1 = build_video_img_path(idx, image_list[1]['src'])
+        img_clip1 = ImageClip(img_path1)
+        scale = min(INNER_WIDTH * 0.49 / img_clip.w, top_height * 0.8 / img_clip.h)
+        img_clip1 = img_clip1.resized(scale)
+        img_clip1 = img_clip1.with_position((0.5, 0.09), relative=True).with_duration(duration)
+
+        box_w = int(INNER_WIDTH * 0.9)
+        used_h = max(img_clip.h, img_clip1.h) + title_height
+        box_h = int(INNER_HEIGHT - used_h)
+        alr = image_list[0]['alr'] + image_list[1]['alr']
+
+        alr0 = image_list[0]['alr']
+        alr1 = image_list[1]['alr']
+        font_size, chars_per_line = calculate_font_size_and_lines(alr, box_w, box_h)
+        alr0 = "    " + alr0.replace('\n', '')
+        alr1 = "    " + alr1.replace('\n', '')
+        alr = '\n'.join([alr0[i:i + chars_per_line] for i in range(0, len(alr0), chars_per_line)])
+        alr += '\n'
+        alr += '\n'.join([alr1[i:i + chars_per_line] for i in range(0, len(alr1), chars_per_line)])
         alr_cip = TextClip(
             text=alr,
-            interline=font_size // 2,
+            interline=font_size // 3,
             font_size=font_size,
             color='black',
             font='./font/simhei.ttf',
             text_align='left',
             size=(box_w, box_h),
-            method='caption'
-        ).with_duration(duration).with_position((0.03, 0.75), relative=True)
-        image_clip_list.append(img_clip)
-        image_clip_list.append(alr_cip)
+            method='caption',
+            bg_color='#CCFFFF'
 
-        img_path = build_video_img_path(idx, image_list[1]['src'])
-        img_clip = ImageClip(img_path)
-        alr = image_list[1]['alr']
-        scale = min(INNER_WIDTH * 0.48 / img_clip.w, top_height * 0.8 / img_clip.h)
-        img_clip = img_clip.resized(scale)
-        img_clip = img_clip.with_position((0.52, 0.11), relative=True).with_duration(duration)
+        ).with_duration(duration).with_position((0.01, used_h / INNER_HEIGHT), relative=True)
 
-        box_w = int(INNER_WIDTH * 0.45)
-        box_h = int(img_clip.h * 0.3)
-        font_size, chars_per_line = calculate_font_size_and_line_length(alr, box_w, box_h)
-        alr = '\n'.join([alr[i:i + chars_per_line] for i in range(0, len(alr), chars_per_line)])
-        alr_cip = TextClip(
-            text=alr,
-            interline=font_size // 2,
-            font_size=font_size,
-            color='black',
-            font='./font/simhei.ttf',
-            text_align='left',
-            size=(box_w, box_h),
-            method='caption'
-        ).with_duration(duration).with_position((0.52, 0.75), relative=True)
+        image_clip_list.append(img_clip1)
         image_clip_list.append(img_clip)
         image_clip_list.append(alr_cip)
 
@@ -275,17 +235,22 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
         font_size=title_font_size,
         color='black',
         font='./font/simhei.ttf',
-        method='label'
+        method='label',
+        horizontal_align='left',
+        size=(INNER_WIDTH, title_font_size),
+        bg_color='#99CCCC'
     ).with_duration(duration).with_position(('left', 'top'))
 
     image_clip_list.insert(0, bg_clip)
     image_clip_list.insert(1, top_title)
     final_video = CompositeVideoClip(clips=image_clip_list, size=(INNER_WIDTH, INNER_HEIGHT))
+
     if is_preview:
         final_video.preview()
     else:
-        final_video.write_videofile(build_video_path(idx, title), remove_temp=True, codec="libx264", audio_codec="aac",
+        final_video.write_videofile(video_path, remove_temp=True, codec="libx264", audio_codec="aac",
                                     fps=FPS)
+    return video_path
 
 
 def get_full_date(today=datetime.now()):
@@ -341,14 +306,25 @@ def test_generate_two():
 
         [
             {
-                'src': 'img_6.png',
+                'src': 'img.png',
                 'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
             }, {
-            'src': 'img_6.png',
-            'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
+            'src': 'img_1.png',
+            'alr': '维多利亚女王（英语：Queen Victoria；1819年5月24日—1901年1月22日），全名亚历山德丽娜·维多利亚（英语：Alexandrina Victoria），1837年6月20日即位为英国女王，1876年成为印度女皇，是唯一拥有女皇头衔的英国女性君主。她统治期间被称为维多利亚时代，是英国在工业、文化、政治、科学与军事都取得相当大发展的时期，伴随而来的是大英帝国的巅峰全盛时期。'
         }
 
         ], "背景", "1", True)
+
+
+def test_edge_tts():
+    # zh-CN-YunjianNeural
+    # zh-CN-YunjianNeural
+    for name in ['zh-CN-shaanxi-XiaoniNeural']:
+        text = '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，'
+        output_file = f'temp/{name}.mp3'
+        rate = 50
+        sh = f'edge-tts --voice {name} --text "{text}" --write-media {output_file} --rate="+{rate}%"'
+        os.system(sh)
 
 
 import argparse
