@@ -10,7 +10,6 @@ from moviepy.video.fx import Loop
 from ollama_client import OllamaClient
 from logging_config import logger
 import sys
-from edge_tts import Communicate
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -215,7 +214,7 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
             text_align='left',
             size=(box_w, box_h),
             method='caption'
-        ).with_duration(duration).with_position((int(img_clip.w+INNER_WIDTH*0.03), int(INNER_HEIGHT*0.12)))
+        ).with_duration(duration).with_position((int(img_clip.w + INNER_WIDTH * 0.03), int(INNER_HEIGHT * 0.12)))
         image_clip_list.append(img_clip)
         image_clip_list.append(alr_cip)
 
@@ -321,6 +320,35 @@ def get_weekday_color():
 
     # 返回对应颜色
     return weekday_color_map[weekday]
+
+
+def test_generate_one():
+    generate_three_layout_video(
+        "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
+
+        [
+            {
+                'src': 'img_6.png',
+                'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
+            }
+
+        ], "背景", "1", True)
+
+
+def test_generate_two():
+    generate_three_layout_video(
+        "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
+
+        [
+            {
+                'src': 'img_6.png',
+                'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
+            }, {
+            'src': 'img_6.png',
+            'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
+        }
+
+        ], "背景", "1", True)
 
 
 import argparse
