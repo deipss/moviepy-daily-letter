@@ -198,4 +198,6 @@ cython_debug/
 .cursorindexingignore
 app.log
 nohup.out
-/material
+
+material/**/*.mp3
+material/**/*.mp4

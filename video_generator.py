@@ -1,15 +1,14 @@
 from moviepy import *
 from PIL import ImageDraw
 from datetime import datetime
-import json
-from zhdate import ZhDate
 import os
 import math
 from PIL import Image
-from moviepy.video.fx import Loop
-from ollama_client import OllamaClient
 from logging_config import logger
 import sys
+from bs4 import BeautifulSoup
+from logging_config import logger
+import markdown
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -133,7 +132,11 @@ def generate_audio(text: str, output_file: str = "audio.wav", rewrite=False) -> 
     os.system(sh)
 
 
-def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: str, additional_text: str,
+def generate_three_layout_video(audio_txt,
+                                image_list: list[str],
+                                quote_list: list[str],
+                                title,
+                                idx: str,
                                 is_preview=False):
     video_path = build_video_path(idx, title)
     if os.path.exists(video_path) and not REWRITE:
@@ -160,9 +163,9 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
     all_img_len = len(image_list)
 
     if all_img_len == 1:
-        img_path = build_video_img_path(idx, image_list[0]['src'])
+        img_path = build_video_img_path(idx, image_list[0])
         img_clip = ImageClip(img_path)
-        alr = image_list[0]['alr']
+        alr = quote_list[0]
         scale = min(INNER_WIDTH * 0.5 / img_clip.w, top_height / img_clip.h)
         img_clip = img_clip.resized(scale)
         img_clip = img_clip.with_position((0.01, 0.09), relative=True).with_duration(duration)
@@ -186,8 +189,8 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
         used_h = img_clip.h + title_height
         box_w1 = int(INNER_WIDTH * 0.95)
         box_h1 = int((INNER_HEIGHT - used_h) * 0.9)
-        font_size, chars_per_line = calculate_font_size_and_lines(additional_text, box_w1, box_h1)
-        additional_text = additional_text.replace('\n', '')
+        font_size, chars_per_line = calculate_font_size_and_lines(quote_list[1], box_w1, box_h1)
+        additional_text = quote_list[1].replace('\n', '')
         additional_text = '\n'.join(
             [additional_text[i:i + chars_per_line] for i in range(0, len(additional_text), chars_per_line)])
         alr_cip1 = TextClip(
@@ -206,25 +209,26 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
         image_clip_list.append(alr_cip1)
 
     if all_img_len == 2:
-        img_path = build_video_img_path(idx, image_list[0]['src'])
+        img_path = build_video_img_path(idx, image_list[0])
         img_clip = ImageClip(img_path)
-        scale = min(INNER_WIDTH * 0.49 / img_clip.w, top_height * 0.8 / img_clip.h)
+        w_radio = 0.48
+        scale = min(INNER_WIDTH * w_radio / img_clip.w, top_height * 0.8 / img_clip.h)
         img_clip = img_clip.resized(scale)
         img_clip = img_clip.with_position((0.015, 0.09), relative=True).with_duration(duration)
 
-        img_path1 = build_video_img_path(idx, image_list[1]['src'])
+        img_path1 = build_video_img_path(idx, image_list[1])
         img_clip1 = ImageClip(img_path1)
-        scale = min(INNER_WIDTH * 0.49 / img_clip1.w, top_height * 0.8 / img_clip1.h)
+        scale = min(INNER_WIDTH * w_radio / img_clip1.w, top_height * 0.8 / img_clip1.h)
         img_clip1 = img_clip1.resized(scale)
         img_clip1 = img_clip1.with_position((0.5, 0.09), relative=True).with_duration(duration)
 
-        box_w = int(INNER_WIDTH * 0.9)
+        box_w = int(INNER_WIDTH * 0.95)
         used_h = max(img_clip.h, img_clip1.h) + title_height
-        box_h = int(INNER_HEIGHT - used_h)
-        alr = image_list[0]['alr'] + image_list[1]['alr']
+        box_h = int((INNER_HEIGHT - used_h)*0.9)
+        alr = quote_list[0] + quote_list[1]
 
-        alr0 = image_list[0]['alr']
-        alr1 = image_list[1]['alr']
+        alr0 = quote_list[0]
+        alr1 = quote_list[1]
         font_size, chars_per_line = calculate_font_size_and_lines(alr, box_w, box_h)
         alr0 = "    " + alr0.replace('\n', '')
         alr1 = "    " + alr1.replace('\n', '')
@@ -272,49 +276,90 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
     return video_path
 
 
-def combine_video(video_paths: list[str], output_file: str):
-    pass
+def parse_markdown_sections(input_file):
+    with open(input_file, 'r', encoding='utf-8') as f:
+        markdown_content = f.read()
+    # 将 Markdown 转换为 HTML
+    html = markdown.markdown(markdown_content, extensions=["extra"])
+    soup = BeautifulSoup(html, "html.parser")
 
-
-def test_generate_one():
-    generate_three_layout_video(
-        "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
-
-        [
-            {
-                'src': 'img_6.png',
-                'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
-            }
-
-        ], "背景", "1", """
-        林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等
-    ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。
-    """, True)
-
-
-def test_generate_two():
-    generate_three_layout_video(
-        "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
-
-        [
-            {
-                'src': 'img_2.png',
-                'alr': '林则徐给妇王的'
-            }, {
-            'src': 'img_13.png',
-            'alr': ''
+    # 遍历所有的 <h2>
+    result = []
+    h2_elements = soup.find_all("h2")
+    for i, h2 in enumerate(h2_elements):
+        section = {
+            "title": h2.get_text(),
+            "images": [],
+            "quotes": [],
+            "texts": []
         }
 
-        ], "背景", "1",
-        """
-        林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等
-    ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。
-    """
+        # 获取当前 h2 到下一个 h2 之间的所有元素
+        next_h2 = h2_elements[i + 1] if i + 1 < len(h2_elements) else None
+        content = []
+        sibling = h2.find_next_sibling()
+        while sibling and sibling != next_h2:
+            content.append(sibling)
+            sibling = sibling.find_next_sibling()
+
+        for el in content:
+            if el.name == "p":
+                # 图片
+                img = el.find("img")
+                if img:
+                    section["images"].append(img["src"])
+                else:
+                    section["texts"].append(el.get_text().strip())
+            elif el.name == "blockquote":
+                section["quotes"].append(el.get_text().strip())
+
+        result.append(section)
+
+    return result
+
+
+def generate_one_story_video():
+    idx = 1
+    sections = parse_markdown_sections('material/1/script.md')
+    paths = []
+    for i, section in enumerate(sections):
+        txt = "".join(section['texts'])
+        text = txt.replace('\n', '')
+        path = generate_three_layout_video(
+            text,
+            section['images'],
+            section['quotes'],
+            section['title'],
+            str(idx))
+        paths.append(path)
+    logger.info(f"paths={paths}")
+
+
+
+def dtest_generate_one():
+    generate_three_layout_video(
+        "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
+
+        ['img_6.png'], ['家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任',
+                        """  林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等
+                            ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。
+                            """,
+                        ], "背景", "1", True)
+
+
+def dtest_generate_two():
+    generate_three_layout_video(
+        "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
+        ['img_6.png', 'img_7.png'],
+        ['家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任',
+         """  林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等
+             ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。
+             """,
+         ], "背景", "1"
         , True)
 
 
-def test_edge_tts():
-    # zh-CN-YunjianNeural
+def dtest_edge_tts():
     # zh-CN-YunjianNeural
     for name in ['zh-CN-shaanxi-XiaoniNeural']:
         text = '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，'
@@ -348,14 +393,4 @@ if __name__ == "__main__":
     if args.rewrite:
         REWRITE = True
         logger.info("指定强制重写")
-
-    generate_three_layout_video(
-        "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
-
-        [
-            {
-                'src': 'img_6.png',
-                'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
-            }
-
-        ], "背景", "1", '', True)
+    generate_one_story_video()
