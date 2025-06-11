@@ -188,7 +188,8 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
         box_h1 = int((INNER_HEIGHT - used_h) * 0.9)
         font_size, chars_per_line = calculate_font_size_and_lines(additional_text, box_w1, box_h1)
         additional_text = additional_text.replace('\n', '')
-        additional_text = '\n'.join([additional_text[i:i + chars_per_line] for i in range(0, len(additional_text), chars_per_line)])
+        additional_text = '\n'.join(
+            [additional_text[i:i + chars_per_line] for i in range(0, len(additional_text), chars_per_line)])
         alr_cip1 = TextClip(
             text=additional_text,
             interline=font_size // 3,
@@ -213,7 +214,7 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
 
         img_path1 = build_video_img_path(idx, image_list[1]['src'])
         img_clip1 = ImageClip(img_path1)
-        scale = min(INNER_WIDTH * 0.49 / img_clip.w, top_height * 0.8 / img_clip.h)
+        scale = min(INNER_WIDTH * 0.49 / img_clip1.w, top_height * 0.8 / img_clip1.h)
         img_clip1 = img_clip1.resized(scale)
         img_clip1 = img_clip1.with_position((0.5, 0.09), relative=True).with_duration(duration)
 
@@ -240,7 +241,7 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
             size=(box_w, box_h),
             method='caption'
 
-        ).with_duration(duration).with_position((0.01, (used_h+font_size//2) / INNER_HEIGHT), relative=True)
+        ).with_duration(duration).with_position((0.01, (used_h + font_size // 2) / INNER_HEIGHT), relative=True)
 
         image_clip_list.append(img_clip1)
         image_clip_list.append(img_clip)
@@ -297,10 +298,10 @@ def test_generate_two():
 
         [
             {
-                'src': 'img.png',
+                'src': 'img_2.png',
                 'alr': '林则徐给妇王的'
             }, {
-            'src': 'img_1.png',
+            'src': 'img_13.png',
             'alr': ''
         }
 
