@@ -133,7 +133,7 @@ def generate_audio(text: str, output_file: str = "audio.wav", rewrite=False) -> 
     os.system(sh)
 
 
-def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: str,
+def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: str, additional_text: str,
                                 is_preview=False):
     video_path = build_video_path(idx, title)
     if os.path.exists(video_path) and not REWRITE:
@@ -175,14 +175,34 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
             text=alr,
             interline=font_size // 2,
             font_size=font_size,
-            color='black',
+            color=MAIN_COLOR,
             font='./font/simhei.ttf',
             text_align='left',
             size=(box_w, box_h),
             method='caption',
+
         ).with_duration(duration).with_position((int(img_clip.w + INNER_WIDTH * 0.015), int(INNER_HEIGHT * 0.10)))
+
+        used_h = img_clip.h + title_height
+        box_w1 = int(INNER_WIDTH * 0.95)
+        box_h1 = int((INNER_HEIGHT - used_h) * 0.9)
+        font_size, chars_per_line = calculate_font_size_and_lines(additional_text, box_w1, box_h1)
+        additional_text = additional_text.replace('\n', '')
+        additional_text = '\n'.join([additional_text[i:i + chars_per_line] for i in range(0, len(additional_text), chars_per_line)])
+        alr_cip1 = TextClip(
+            text=additional_text,
+            interline=font_size // 3,
+            font_size=font_size,
+            color='black',
+            font='./font/simhei.ttf',
+            text_align='left',
+            size=(box_w1, box_h1),
+            method='caption',
+        ).with_duration(duration).with_position((0.01, used_h / INNER_HEIGHT), relative=True)
+
         image_clip_list.append(img_clip)
         image_clip_list.append(alr_cip)
+        image_clip_list.append(alr_cip1)
 
     if all_img_len == 2:
         img_path = build_video_img_path(idx, image_list[0]['src'])
@@ -218,10 +238,9 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
             font='./font/simhei.ttf',
             text_align='left',
             size=(box_w, box_h),
-            method='caption',
-            bg_color='#CCFFFF'
+            method='caption'
 
-        ).with_duration(duration).with_position((0.01, used_h / INNER_HEIGHT), relative=True)
+        ).with_duration(duration).with_position((0.01, (used_h+font_size//2) / INNER_HEIGHT), relative=True)
 
         image_clip_list.append(img_clip1)
         image_clip_list.append(img_clip)
@@ -237,8 +256,7 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
         font='./font/simhei.ttf',
         method='label',
         horizontal_align='left',
-        size=(INNER_WIDTH, title_font_size),
-        bg_color='#99CCCC'
+        size=(INNER_WIDTH, title_font_size)
     ).with_duration(duration).with_position(('left', 'top'))
 
     image_clip_list.insert(0, bg_clip)
@@ -253,38 +271,8 @@ def generate_three_layout_video(audio_txt, image_list: list[dict], title, idx: s
     return video_path
 
 
-def get_full_date(today=datetime.now()):
-    """获取完整的日期信息：公历日期、农历日期和星期"""
-
-    # 获取公历日期
-    solar_date = today.strftime("%Y年%m月%d日")
-
-    # 获取农历日期
-    lunar_date = ZhDate.from_datetime(today).chinese()
-
-    # 获取星期几
-    weekday_map = ["一", "二", "三", "四", "五", "六", "日"]
-    weekday = f"星期{weekday_map[today.weekday()]}"
-    return "今天是{}, \n农历{}, \n{},欢迎收看【今日快电】".format(solar_date, lunar_date, weekday)
-
-
-def get_weekday_color():
-    # 星期与颜色的映射关系 (0 = Monday, 6 = Sunday)
-    weekday_color_map = {
-        0: 'Red',  # 周一 - 红色
-        1: 'Orange',  # 周二 - 橙色
-        2: 'Yellow',  # 周三 - 黄色
-        3: 'Green',  # 周四 - 绿色
-        4: 'Blue',  # 周五 - 蓝色
-        5: 'Purple',  # 周六 - 紫色
-        6: 'Pink'  # 周日 - 粉色
-    }
-
-    # 获取当前星期几 (0=Monday, 6=Sunday)
-    weekday = datetime.today().weekday()
-
-    # 返回对应颜色
-    return weekday_color_map[weekday]
+def combine_video(video_paths: list[str], output_file: str):
+    pass
 
 
 def test_generate_one():
@@ -297,7 +285,10 @@ def test_generate_one():
                 'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
             }
 
-        ], "背景", "1", True)
+        ], "背景", "1", """
+        林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等
+    ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。
+    """, True)
 
 
 def test_generate_two():
@@ -307,13 +298,18 @@ def test_generate_two():
         [
             {
                 'src': 'img.png',
-                'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
+                'alr': '林则徐给妇王的'
             }, {
             'src': 'img_1.png',
-            'alr': '维多利亚女王（英语：Queen Victoria；1819年5月24日—1901年1月22日），全名亚历山德丽娜·维多利亚（英语：Alexandrina Victoria），1837年6月20日即位为英国女王，1876年成为印度女皇，是唯一拥有女皇头衔的英国女性君主。她统治期间被称为维多利亚时代，是英国在工业、文化、政治、科学与军事都取得相当大发展的时期，伴随而来的是大英帝国的巅峰全盛时期。'
+            'alr': ''
         }
 
-        ], "背景", "1", True)
+        ], "背景", "1",
+        """
+        林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等
+    ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。
+    """
+        , True)
 
 
 def test_edge_tts():
@@ -361,4 +357,4 @@ if __name__ == "__main__":
                 'alr': '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，又字少穆、石麟，晚号俟村老人、俟村退叟、七十二峰退叟、瓶泉居士、栎社散人等 ，家族为文山林氏。是清朝后期政治家、思想家、文学家、改革先驱、诗人、学者、翻译家。1811年林则徐（26岁）中进士，后曾官至一品，曾经担任湖广总督、陕甘总督和云贵总督，两次受命钦差大臣。林则徐知名于主张严禁进口的洋鸦片，他曾于1833年建议在国内种鸦片以抗衡洋鸦片。'
             }
 
-        ], "背景", "1", True)
+        ], "背景", "1", '', True)
