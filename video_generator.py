@@ -107,12 +107,12 @@ def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, l
     return 40, len(text)
 
 
-def generate_audio(text: str, output_file: str = "audio.wav") -> None:
-    if os.path.exists(output_file) and not REWRITE:
+def generate_audio(text: str, output_file: str = "audio.wav",is_preview=False) -> None:
+    if os.path.exists(output_file) and not REWRITE and not is_preview:
         logger.warning(f"{output_file}已存在，跳过生成音频。")
         return
-    logger.info(f"{output_file}开始生成音频: {text}")
-    rate = 50
+    logger.info(f"{output_file}开始生成音频 is_preview={is_preview}: {text}")
+    rate = 300 if is_preview else 50
     sh = f'edge-tts --voice zh-CN-YunjianNeural --text "{text}" --write-media {output_file} --rate="+{rate}%"'
     os.system(sh)
 
@@ -126,7 +126,7 @@ def generate_video_end(is_preview=False):
     bg_clip = ImageClip(BACKGROUND_IMAGE_PATH)
     audio_path = build_today_end_audio_path()
 
-    generate_audio("今天的分享，至此结束，青山不老，绿水常流。我们下次见。", audio_path)
+    generate_audio("今天的分享，至此结束，青山不老，绿水常流。我们下次见。", audio_path,is_preview)
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
 
@@ -207,7 +207,7 @@ def generate_three_layout_video(audio_txt,
     # 加载背景和音频
     bg_clip = ColorClip(size=(INNER_WIDTH, INNER_HEIGHT), color=(255, 255, 255))  # 白色背景
     audio_temp_path = build_audio_path(idx, title)
-    generate_audio(audio_txt, output_file=audio_temp_path)
+    generate_audio(audio_txt, output_file=audio_temp_path,is_preview=is_preview)
     audio_clip = AudioFileClip(audio_temp_path)
     duration = audio_clip.duration
     logger.info(f"audio_clip.duration={duration}")
@@ -413,13 +413,14 @@ def parse_markdown_sections(input_file):
 def generate_one_story_video(idx=1):
     sections = parse_markdown_sections(f'material/{idx}/script.md')
     paths = []
-    for i, section in enumerate(sections[4:5]):
+    for i, section in enumerate(sections):
         audio_txt = ""
         if len(section['images']) == 1:
             audio_txt = "".join(section['texts'])
         if len(section['images']) == 2:
             audio_txt = "".join(section['quotes'])
-        audio_txt = audio_txt.replace('\n', '')
+        audio_txt = audio_txt.replace('\n', '').replace(' ', '')
+        section['quotes'] = [q.replace('\n', '').replace(' ', '') for q in section['quotes']]
         path = generate_three_layout_video(
             audio_txt,
             section['images'],
@@ -446,7 +447,7 @@ def test_generate_video_all():
             audio_txt = "".join(section['texts'])
         if len(section['images']) == 2:
             audio_txt = "".join(section['quotes'])
-        audio_txt = audio_txt.replace('\n', '')
+        audio_txt = audio_txt.replace('\n', '').replace(' ', '')
         path = generate_three_layout_video(
             audio_txt,
             section['images'],
