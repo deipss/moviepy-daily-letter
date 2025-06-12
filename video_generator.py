@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 from logging_config import logger
 import markdown
 import json
+import time
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -49,6 +50,9 @@ def build_audio_path(idx: str, name: str):
 def build_video_img_path(idx: str, img_name: str):
     return os.path.join(MATERIAL_PATH, idx, img_name)
 
+
+def build_letters_json_path():
+    return os.path.join('letters', "letters.json")
 
 def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, border_color=MAIN_COLOR,
                               bg_color=MAIN_BG_COLOR):
@@ -104,10 +108,10 @@ def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, l
         if total_height <= box_height:
             return font_size, chars_per_line
 
+    logger.warning(f"无法生成适合的文本框，请检查文本框大小是否正确,返回了默认值40和所有字符")
     return 40, len(text)
 
-
-def generate_audio(text: str, output_file: str = "audio.wav",is_preview=False) -> None:
+def generate_audio(text: str, output_file: str = "audio.wav", is_preview=False) -> None:
     if os.path.exists(output_file) and not REWRITE and not is_preview:
         logger.warning(f"{output_file}已存在，跳过生成音频。")
         return
@@ -115,8 +119,6 @@ def generate_audio(text: str, output_file: str = "audio.wav",is_preview=False) -
     rate = 300 if is_preview else 50
     sh = f'edge-tts --voice zh-CN-YunjianNeural --text "{text}" --write-media {output_file} --rate="+{rate}%"'
     os.system(sh)
-
-
 def generate_video_end(is_preview=False):
     output_path = build_end_path()
     if os.path.exists(output_path) and not REWRITE and not is_preview:
@@ -126,7 +128,7 @@ def generate_video_end(is_preview=False):
     bg_clip = ImageClip(BACKGROUND_IMAGE_PATH)
     audio_path = build_today_end_audio_path()
 
-    generate_audio("今天的分享，至此结束，青山不老，绿水常流。我们下次见。", audio_path,is_preview)
+    generate_audio("今天的分享，至此结束，青山不老，绿水常流。我们下期见。", audio_path, is_preview)
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
 
@@ -156,6 +158,7 @@ def generate_video_end(is_preview=False):
 
 
 def combine_all_videos_with_bg(video_paths, output_path):
+    start_time = time.time()
     if os.path.exists(output_path) and not REWRITE:
         logger.info(f"视频整合生成{output_path}已存在,直接返回")
         return
@@ -182,8 +185,8 @@ def combine_all_videos_with_bg(video_paths, output_path):
     final_clip = concatenate_videoclips(clips, method="compose")
     # 导出最终视频
     final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=FPS)
-    logger.info(f"视频整合生成完成,path={output_path}")
-    # final_clip.preview()
+    execution_time = time.time() - start_time  # 计算执行时间
+    logger.info(f"视频整合生成完成,path={output_path},总耗时: {execution_time:.2f} 秒")
 
 
 def generate_three_layout_video(audio_txt,
@@ -192,6 +195,7 @@ def generate_three_layout_video(audio_txt,
                                 title,
                                 idx: str,
                                 is_preview=False):
+    start_time = time.time()
     video_path = build_video_path(idx, title)
     if os.path.exists(video_path) and not REWRITE and not is_preview:
         logger.warning(f"{video_path}已存在，跳过生成视频。")
@@ -207,7 +211,7 @@ def generate_three_layout_video(audio_txt,
     # 加载背景和音频
     bg_clip = ColorClip(size=(INNER_WIDTH, INNER_HEIGHT), color=(255, 255, 255))  # 白色背景
     audio_temp_path = build_audio_path(idx, title)
-    generate_audio(audio_txt, output_file=audio_temp_path,is_preview=is_preview)
+    generate_audio(audio_txt, output_file=audio_temp_path, is_preview=is_preview)
     audio_clip = AudioFileClip(audio_temp_path)
     duration = audio_clip.duration
     logger.info(f"audio_clip.duration={duration}")
@@ -327,11 +331,11 @@ def generate_three_layout_video(audio_txt,
     else:
         final_video.write_videofile(video_path, remove_temp=True, codec="libx264", audio_codec="aac",
                                     fps=FPS)
+    execution_time = time.time() - start_time  # 计算执行时间
+    logger.info(f"{video_path}生成总耗时: {execution_time:.2f} 秒")
     return video_path
 
 
-def build_letters_json_path():
-    return os.path.join('letters', "letters.json")
 
 
 # 新增函数：处理 letters.json 文件
