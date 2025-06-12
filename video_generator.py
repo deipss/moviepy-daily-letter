@@ -4,11 +4,11 @@ from datetime import datetime
 import os
 import math
 from PIL import Image
-from logging_config import logger
 import sys
 from bs4 import BeautifulSoup
 from logging_config import logger
 import markdown
+import json
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -55,7 +55,7 @@ def build_video_img_path(idx: str, img_name: str):
 def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, border_color=MAIN_COLOR,
                               bg_color=MAIN_BG_COLOR):
     # 创建一个新的图像
-    image = Image.new("RGB", (width, height), border_color)  # 橘色背景
+    image = Image.new("RGB", (width, height), border_color)
     draw = ImageDraw.Draw(image)
 
     # 计算边框宽度(1%的宽度)
@@ -121,8 +121,9 @@ def generate_audio(text: str, output_file: str = "audio.wav", rewrite=False) -> 
 
 def generate_video_end(is_preview=False):
     output_path = build_end_path()
-    if os.path.exists(output_path) and not REWRITE:
+    if os.path.exists(output_path) and not REWRITE and not is_preview:
         logger.info(f"片尾{output_path}已存在,直接返回")
+        return output_path
     generate_background_image(GLOBAL_WIDTH, GLOBAL_HEIGHT, MAIN_COLOR, '#fbfbfb')
     bg_clip = ImageClip(BACKGROUND_IMAGE_PATH)
     audio_path = build_today_end_audio_path()
@@ -244,7 +245,7 @@ def generate_three_layout_video(audio_txt,
         used_h = img_clip.h + title_height
         box_w1 = int(INNER_WIDTH * 0.95)
         box_h1 = int((INNER_HEIGHT - used_h) * 0.9)
-        if len(quote_list) >1:
+        if len(quote_list) > 1:
             font_size, chars_per_line = calculate_font_size_and_lines(quote_list[1], box_w1, box_h1)
             additional_text = quote_list[1].replace('\n', '')
             additional_text = '\n'.join(
@@ -332,6 +333,41 @@ def generate_three_layout_video(audio_txt,
     return video_path
 
 
+def build_letters_json_path():
+    return os.path.join('letters', "letters.json")
+
+
+# 新增函数：处理 letters.json 文件
+def process_letters_json():
+    # 加载 letters.json 文件
+    json_path = build_letters_json_path()
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            letters = json.load(f)
+    except FileNotFoundError:
+        logger.error("letters.json 文件未找到，请检查路径是否正确。")
+        return
+
+    success_count = 0  # 成功生成的计数器
+
+    for letter in letters:
+        if letter.get('generated', True):
+            continue  # 跳过已生成的项
+        try:
+            logger.info(f"开始生成视频{letter['idx']}: {letter['title']}")
+            generate_one_story_video(letter['idx'])
+            letter['generated'] = True
+            success_count += 1
+            logger.info(f"视频生成成功: {letter['title']}")
+            if success_count % 2 == 0:
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(letters, f, ensure_ascii=False, indent=4)
+                logger.info("letters.json 文件已更新。")
+        except Exception as e:
+            logger.error(f"生成视频失败: {letter['title']}, 错误信息: {e}", exc_info=True)
+            continue
+
+
 def parse_markdown_sections(input_file):
     with open(input_file, 'r', encoding='utf-8') as f:
         markdown_content = f.read()
@@ -374,7 +410,7 @@ def parse_markdown_sections(input_file):
     return result
 
 
-def generate_one_story_video(idx = 1):
+def generate_one_story_video(idx=1):
     sections = parse_markdown_sections(f'material/{idx}/script.md')
     paths = []
     for i, section in enumerate(sections[4:5]):
@@ -388,9 +424,12 @@ def generate_one_story_video(idx = 1):
             str(idx), True)
         paths.append(path)
     logger.info(f"paths={paths}")
-    # paths.append(generate_video_end(),)
-    # combine_videos_with_transitions(paths, build_video_final_path(str(idx)))
+    paths.append(generate_video_end())
+    combine_videos_with_transitions(paths, build_video_final_path(str(idx)))
 
+
+def test_generate_all():
+    generate_video_end(is_preview=True)
 
 def test_generate_one():
     generate_three_layout_video(
@@ -444,7 +483,6 @@ if __name__ == "__main__":
     init_param()
 
     parser = argparse.ArgumentParser(description="视频生成工具")
-    parser.add_argument("--today", type=str, default=datetime.now().strftime("%Y%m%d"), help="指定日期")
     parser.add_argument("--rewrite", type=bool, default=False, help="是否重写")
     args = parser.parse_args()
     logger.info(f"新闻视频生成工具 参数args={args}")
@@ -453,9 +491,6 @@ if __name__ == "__main__":
         REWRITE = True
         logger.info("指定强制重写")
     try:
-
-
-
-        generate_one_story_video()
+        process_letters_json()
     except Exception as e:
         logger.error(f"生成时异常，{e}", exc_info=True)
