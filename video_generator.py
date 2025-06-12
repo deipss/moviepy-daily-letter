@@ -29,7 +29,15 @@ REWRITE = False
 
 
 def build_video_final_path(idx: str):
-    return os.path.join(MATERIAL_PATH, idx, VIDEO_FILE_NAME)
+    return os.path.join('final_videos', idx + '_' + VIDEO_FILE_NAME)
+
+
+def build_today_end_audio_path():
+    return os.path.join(MATERIAL_PATH, "end.mp3")
+
+
+def build_end_path():
+    return os.path.join(MATERIAL_PATH, "end.mp4")
 
 
 def build_video_path(idx: str, name: str):
@@ -44,9 +52,10 @@ def build_video_img_path(idx: str, img_name: str):
     return os.path.join(MATERIAL_PATH, idx, img_name)
 
 
-def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, color=MAIN_COLOR):
+def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, border_color=MAIN_COLOR,
+                              bg_color=MAIN_BG_COLOR):
     # 创建一个新的图像
-    image = Image.new("RGB", (width, height), color)  # 橘色背景
+    image = Image.new("RGB", (width, height), border_color)  # 橘色背景
     draw = ImageDraw.Draw(image)
 
     # 计算边框宽度(1%的宽度)
@@ -56,18 +65,10 @@ def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, color=MA
     draw.rounded_rectangle(
         [(border_width, border_width), (width - border_width, height - border_width)],
         radius=40,  # 圆角半径
-        fill=MAIN_BG_COLOR  # 灰白色填充
+        fill=bg_color  # 灰白色填充
     )
-
     image.save(BACKGROUND_IMAGE_PATH)
     return image
-
-
-def add_newline_every_n_chars(text, n):
-    if n <= 0:
-        return text
-
-    return '\n'.join([text[i:i + n] for i in range(0, len(text), n)])
 
 
 def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, line_height_ratio=1.5,
@@ -108,20 +109,6 @@ def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, l
     return 40, len(text)
 
 
-def truncate_after_find_period(text: str, end_pos: int = 400) -> str:
-    if len(text) <= end_pos:
-        return text
-    # 从end_pos位置开始向后查找第一个句号
-    last_period = text.find('。', end_pos)
-
-    if last_period != -1:
-        # 截取至句号位置（包含句号）
-        return text[:last_period + 1]
-    else:
-        # 300字符后无句号，返回全文（或截断并添加省略号）
-        return text  # 或返回 text[:end_pos] + "..."（按需选择）
-
-
 def generate_audio(text: str, output_file: str = "audio.wav", rewrite=False) -> None:
     if os.path.exists(output_file) and not REWRITE:
         logger.warning(f"{output_file}已存在，跳过生成音频。")
@@ -132,6 +119,74 @@ def generate_audio(text: str, output_file: str = "audio.wav", rewrite=False) -> 
     os.system(sh)
 
 
+def generate_video_end(is_preview=False):
+    output_path = build_end_path()
+    if os.path.exists(output_path) and not REWRITE:
+        logger.info(f"片尾{output_path}已存在,直接返回")
+    generate_background_image(GLOBAL_WIDTH, GLOBAL_HEIGHT, MAIN_COLOR, '#fbfbfb')
+    bg_clip = ImageClip(BACKGROUND_IMAGE_PATH)
+    audio_path = build_today_end_audio_path()
+
+    generate_audio("今天的分享，至此结束，青山不老，绿水常流。我们下次见。", audio_path, rewrite=True)
+    audio_clip = AudioFileClip(audio_path)
+    duration = audio_clip.duration
+
+    # 设置背景视频时长
+    bg_clip = bg_clip.with_duration(duration).with_audio(audio_clip)
+
+    # 创建日期文字
+    txt_clip = TextClip(
+        text="谢谢收看",
+        font_size=int(GLOBAL_HEIGHT * 0.15),
+        color=MAIN_COLOR,
+        font='./font/simhei.ttf',
+        stroke_color='black',
+        stroke_width=2
+    ).with_duration(duration).with_position(('center', GLOBAL_HEIGHT * 0.7))
+
+    lady = (VideoFileClip('assets/announcer_man.mp4').with_duration(duration)
+            .with_position((GLOBAL_WIDTH * 0.38, GLOBAL_HEIGHT * 0.17)).resized(0.7))
+
+    # 合成最终视频
+    final_clip = CompositeVideoClip([bg_clip, txt_clip, lady], size=bg_clip.size)
+    if is_preview:
+        final_clip.preview()
+    else:
+        final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=FPS)
+    return output_path
+
+
+def combine_videos_with_transitions(video_paths, output_path):
+    if os.path.exists(output_path) and not REWRITE:
+        logger.info(f"视频整合生成{output_path}已存在,直接返回")
+        return
+    generate_background_image(GLOBAL_WIDTH, GLOBAL_HEIGHT, MAIN_COLOR)
+    bg_clip = ImageClip(BACKGROUND_IMAGE_PATH)
+
+    # 加载视频和音频
+    clips = []
+    for i, video_path in enumerate(video_paths):
+        # 加载视频
+        video = VideoFileClip(video_path)
+        if (video.duration < 2):
+            logger.warning(f"视频{video_path}时长不足2秒,跳过")
+            continue
+        video = video.with_position(('center', 'center'), relative=True)
+        # 将视频放置在背景上
+        video_with_bg = CompositeVideoClip([
+            bg_clip,
+            video
+        ], use_bgclip=True)
+        # 将视频放置在背景上
+        clips.append(video_with_bg)
+
+    final_clip = concatenate_videoclips(clips, method="compose")
+    # 导出最终视频
+    final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=FPS)
+    logger.info(f"视频整合生成完成,path={output_path}")
+    # final_clip.preview()
+
+
 def generate_three_layout_video(audio_txt,
                                 image_list: list[str],
                                 quote_list: list[str],
@@ -139,7 +194,7 @@ def generate_three_layout_video(audio_txt,
                                 idx: str,
                                 is_preview=False):
     video_path = build_video_path(idx, title)
-    if os.path.exists(video_path) and not REWRITE:
+    if os.path.exists(video_path) and not REWRITE and not is_preview:
         logger.warning(f"{video_path}已存在，跳过生成视频。")
         return video_path
     # 合成最终视频
@@ -189,24 +244,25 @@ def generate_three_layout_video(audio_txt,
         used_h = img_clip.h + title_height
         box_w1 = int(INNER_WIDTH * 0.95)
         box_h1 = int((INNER_HEIGHT - used_h) * 0.9)
-        font_size, chars_per_line = calculate_font_size_and_lines(quote_list[1], box_w1, box_h1)
-        additional_text = quote_list[1].replace('\n', '')
-        additional_text = '\n'.join(
-            [additional_text[i:i + chars_per_line] for i in range(0, len(additional_text), chars_per_line)])
-        alr_cip1 = TextClip(
-            text=additional_text,
-            interline=font_size // 3,
-            font_size=font_size,
-            color='black',
-            font='./font/simhei.ttf',
-            text_align='left',
-            size=(box_w1, box_h1),
-            method='caption',
-        ).with_duration(duration).with_position((0.01, used_h / INNER_HEIGHT), relative=True)
+        if len(quote_list) >1:
+            font_size, chars_per_line = calculate_font_size_and_lines(quote_list[1], box_w1, box_h1)
+            additional_text = quote_list[1].replace('\n', '')
+            additional_text = '\n'.join(
+                [additional_text[i:i + chars_per_line] for i in range(0, len(additional_text), chars_per_line)])
+            alr_cip1 = TextClip(
+                text=additional_text,
+                interline=font_size // 3,
+                font_size=font_size,
+                color='black',
+                font='./font/simhei.ttf',
+                text_align='left',
+                size=(box_w1, box_h1),
+                method='caption',
+            ).with_duration(duration).with_position((0.01, used_h / INNER_HEIGHT), relative=True)
+            image_clip_list.append(alr_cip1)
 
         image_clip_list.append(img_clip)
         image_clip_list.append(alr_cip)
-        image_clip_list.append(alr_cip1)
 
     if all_img_len == 2:
         img_path = build_video_img_path(idx, image_list[0])
@@ -224,7 +280,7 @@ def generate_three_layout_video(audio_txt,
 
         box_w = int(INNER_WIDTH * 0.95)
         used_h = max(img_clip.h, img_clip1.h) + title_height
-        box_h = int((INNER_HEIGHT - used_h)*0.9)
+        box_h = int((INNER_HEIGHT - used_h) * 0.9)
         alr = quote_list[0] + quote_list[1]
 
         alr0 = quote_list[0]
@@ -318,11 +374,10 @@ def parse_markdown_sections(input_file):
     return result
 
 
-def generate_one_story_video():
-    idx = 1
-    sections = parse_markdown_sections('material/1/script.md')
+def generate_one_story_video(idx = 1):
+    sections = parse_markdown_sections(f'material/{idx}/script.md')
     paths = []
-    for i, section in enumerate(sections):
+    for i, section in enumerate(sections[4:5]):
         txt = "".join(section['texts'])
         text = txt.replace('\n', '')
         path = generate_three_layout_video(
@@ -330,13 +385,14 @@ def generate_one_story_video():
             section['images'],
             section['quotes'],
             section['title'],
-            str(idx))
+            str(idx), True)
         paths.append(path)
     logger.info(f"paths={paths}")
+    # paths.append(generate_video_end(),)
+    # combine_videos_with_transitions(paths, build_video_final_path(str(idx)))
 
 
-
-def dtest_generate_one():
+def test_generate_one():
     generate_three_layout_video(
         "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
 
@@ -347,7 +403,7 @@ def dtest_generate_one():
                         ], "背景", "1", True)
 
 
-def dtest_generate_two():
+def test_generate_two():
     generate_three_layout_video(
         "开始今天的信件前，让我们看下今天的世界。2013年，乌拉圭成为世界上第一个将娱乐用大麻的种植、销售和使用完全合法化的国家。",
         ['img_6.png', 'img_7.png'],
@@ -359,7 +415,7 @@ def dtest_generate_two():
         , True)
 
 
-def dtest_edge_tts():
+def test_edge_tts():
     # zh-CN-YunjianNeural
     for name in ['zh-CN-shaanxi-XiaoniNeural']:
         text = '林则徐（1785年8月30日—1850年11月22日）男性，福建省福州府侯官县左营司巷（今福州市鼓楼区）人 ，字元抚，'
@@ -371,18 +427,21 @@ def dtest_edge_tts():
 
 import argparse
 
-if __name__ == "__main__":
-    logger.info("=======================开始执行=========================")
 
+def init_param():
     if not os.path.exists('temp'):
         os.mkdir('temp')
     if not os.path.exists('final_videos'):
         os.mkdir('final_videos')
     if not os.path.exists('material'):
         os.mkdir('material')
-
     logger.info(
         f"GLOBAL_WIDTH:{GLOBAL_WIDTH}\nGLOBAL_HEIGHT:{GLOBAL_HEIGHT}\n W_H_RADIO:{W_H_RADIO}\n  FPS:{FPS}\n  BACKGROUND_IMAGE_PATH:{BACKGROUND_IMAGE_PATH}\nGAP:{GAP}\nINNER_WIDTH:{INNER_WIDTH}\nINNER_HEIGHT:{INNER_HEIGHT}")
+
+
+if __name__ == "__main__":
+    logger.info("=======================开始执行=========================")
+    init_param()
 
     parser = argparse.ArgumentParser(description="视频生成工具")
     parser.add_argument("--today", type=str, default=datetime.now().strftime("%Y%m%d"), help="指定日期")
@@ -393,4 +452,10 @@ if __name__ == "__main__":
     if args.rewrite:
         REWRITE = True
         logger.info("指定强制重写")
-    generate_one_story_video()
+    try:
+
+
+
+        generate_one_story_video()
+    except Exception as e:
+        logger.error(f"生成时异常，{e}", exc_info=True)
