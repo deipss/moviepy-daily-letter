@@ -23,7 +23,6 @@ MAIN_COLOR = "#0099CC"
 MAIN_BG_COLOR = "#FFFFFF"
 VIDEO_FILE_NAME = "video.mp4"
 MATERIAL_PATH = 'material'
-
 REWRITE = False
 
 
@@ -438,7 +437,6 @@ def test_generate_video_all():
     idx = 1
     sections = parse_markdown_sections(f'material/{idx}/script.md')
     paths = []
-    previews = []
     for i, section in enumerate(sections):
         audio_txt = ""
         if len(section['images']) == 1:
@@ -453,6 +451,7 @@ def test_generate_video_all():
             section['title'],
             str(idx), True)
         paths.append(path)
+
 
 def test_generate_video_h2():
     idx = 1
