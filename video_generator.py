@@ -108,7 +108,7 @@ def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, l
     return 40, len(text)
 
 
-def generate_audio(text: str, output_file: str = "audio.wav", rewrite=False) -> None:
+def generate_audio(text: str, output_file: str = "audio.wav") -> None:
     if os.path.exists(output_file) and not REWRITE:
         logger.warning(f"{output_file}已存在，跳过生成音频。")
         return
@@ -127,7 +127,7 @@ def generate_video_end(is_preview=False):
     bg_clip = ImageClip(BACKGROUND_IMAGE_PATH)
     audio_path = build_today_end_audio_path()
 
-    generate_audio("今天的分享，至此结束，青山不老，绿水常流。我们下次见。", audio_path, rewrite=True)
+    generate_audio("今天的分享，至此结束，青山不老，绿水常流。我们下次见。", audio_path)
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
 
@@ -156,7 +156,7 @@ def generate_video_end(is_preview=False):
     return output_path
 
 
-def combine_videos_with_transitions(video_paths, output_path):
+def combine_all_videos_with_bg(video_paths, output_path):
     if os.path.exists(output_path) and not REWRITE:
         logger.info(f"视频整合生成{output_path}已存在,直接返回")
         return
@@ -323,7 +323,6 @@ def generate_three_layout_video(audio_txt,
     image_clip_list.insert(0, bg_clip)
     image_clip_list.insert(1, top_title)
     final_video = CompositeVideoClip(clips=image_clip_list, size=(INNER_WIDTH, INNER_HEIGHT))
-
     if is_preview:
         final_video.preview()
     else:
@@ -428,12 +427,32 @@ def generate_one_story_video(idx=1):
         paths.append(path)
     logger.info(f"paths={paths}")
     paths.append(generate_video_end())
-    combine_videos_with_transitions(paths, build_video_final_path(str(idx)))
+    combine_all_videos_with_bg(paths, build_video_final_path(str(idx)))
 
 
 def test_generate_video_end():
     generate_video_end(is_preview=True)
 
+
+def test_generate_video_all():
+    idx = 1
+    sections = parse_markdown_sections(f'material/{idx}/script.md')
+    paths = []
+    previews = []
+    for i, section in enumerate(sections):
+        audio_txt = ""
+        if len(section['images']) == 1:
+            audio_txt = "".join(section['texts'])
+        if len(section['images']) == 2:
+            audio_txt = "".join(section['quotes'])
+        audio_txt = audio_txt.replace('\n', '')
+        path = generate_three_layout_video(
+            audio_txt,
+            section['images'],
+            section['quotes'],
+            section['title'],
+            str(idx), True)
+        paths.append(path)
 
 def test_generate_video_h2():
     idx = 1
