@@ -360,6 +360,9 @@ def process_letters_json():
                 with open(json_path, 'w', encoding='utf-8') as f:
                     json.dump(letters, f, ensure_ascii=False, indent=4)
                 logger.info("letters.json 文件已更新。")
+            if success_count == 4:
+                logger.info("已处理4个视频，结束。")
+                return
         except Exception as e:
             logger.error(f"生成视频失败: {letter['title']}, 错误信息: {e}", exc_info=True)
             continue
