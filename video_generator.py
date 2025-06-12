@@ -351,11 +351,11 @@ def process_letters_json():
         if letter.get('generated', True):
             continue  # 跳过已生成的项
         try:
-            logger.info(f"开始生成视频{letter['idx']}: {letter['title']}")
+            logger.info(f"开始生成视频{letter['idx']}: {letter['letter']}")
             generate_one_story_video(letter['idx'])
             letter['generated'] = True
             success_count += 1
-            logger.info(f"视频生成成功: {letter['title']}")
+            logger.info(f"视频生成成功: {letter['letter']}")
             if success_count % 2 == 0:
                 with open(json_path, 'w', encoding='utf-8') as f:
                     json.dump(letters, f, ensure_ascii=False, indent=4)
@@ -364,7 +364,7 @@ def process_letters_json():
                 logger.info("已处理4个视频，结束。")
                 return
         except Exception as e:
-            logger.error(f"生成视频失败: {letter['title']}, 错误信息: {e}", exc_info=True)
+            logger.error(f"生成视频失败: {letter['letter']}, 错误信息: {e}", exc_info=True)
             continue
 
 
