@@ -1,6 +1,5 @@
 from moviepy import *
 from PIL import ImageDraw
-from datetime import datetime
 import os
 import math
 from PIL import Image
@@ -245,22 +244,22 @@ def generate_three_layout_video(audio_txt,
         used_h = img_clip.h + title_height
         box_w1 = int(INNER_WIDTH * 0.95)
         box_h1 = int((INNER_HEIGHT - used_h) * 0.9)
-        if len(quote_list) > 1:
-            font_size, chars_per_line = calculate_font_size_and_lines(quote_list[1], box_w1, box_h1)
-            additional_text = quote_list[1].replace('\n', '')
-            additional_text = '\n'.join(
-                [additional_text[i:i + chars_per_line] for i in range(0, len(additional_text), chars_per_line)])
-            alr_cip1 = TextClip(
-                text=additional_text,
-                interline=font_size // 3,
-                font_size=font_size,
-                color='black',
-                font='./font/simhei.ttf',
-                text_align='left',
-                size=(box_w1, box_h1),
-                method='caption',
-            ).with_duration(duration).with_position((0.01, used_h / INNER_HEIGHT), relative=True)
-            image_clip_list.append(alr_cip1)
+
+        additional_text = audio_txt
+        font_size, chars_per_line = calculate_font_size_and_lines(additional_text, box_w1, box_h1)
+        additional_text = '\n'.join(
+            [additional_text[i:i + chars_per_line] for i in range(0, len(additional_text), chars_per_line)])
+        alr_cip1 = TextClip(
+            text=additional_text,
+            interline=font_size // 3,
+            font_size=font_size,
+            color='black',
+            font='./font/simhei.ttf',
+            text_align='left',
+            size=(box_w1, box_h1),
+            method='caption',
+        ).with_duration(duration).with_position((0.01, used_h / INNER_HEIGHT), relative=True)
+        image_clip_list.append(alr_cip1)
 
         image_clip_list.append(img_clip)
         image_clip_list.append(alr_cip)
@@ -414,22 +413,48 @@ def generate_one_story_video(idx=1):
     sections = parse_markdown_sections(f'material/{idx}/script.md')
     paths = []
     for i, section in enumerate(sections[4:5]):
-        txt = "".join(section['texts'])
-        text = txt.replace('\n', '')
+        audio_txt = ""
+        if len(section['images']) == 1:
+            audio_txt = "".join(section['texts'])
+        if len(section['images']) == 2:
+            audio_txt = "".join(section['quotes'])
+        audio_txt = audio_txt.replace('\n', '')
         path = generate_three_layout_video(
-            text,
+            audio_txt,
             section['images'],
             section['quotes'],
             section['title'],
-            str(idx), True)
+            str(idx), False)
         paths.append(path)
     logger.info(f"paths={paths}")
     paths.append(generate_video_end())
     combine_videos_with_transitions(paths, build_video_final_path(str(idx)))
 
 
-def test_generate_all():
+def test_generate_video_end():
     generate_video_end(is_preview=True)
+
+
+def test_generate_video_h2():
+    idx = 1
+    sections = parse_markdown_sections(f'material/{idx}/script.md')
+    paths = []
+    for i, section in enumerate(sections[4:5]):
+        audio_txt = ""
+        if len(section['images']) == 1:
+            audio_txt = "".join(section['texts'])
+        if len(section['images']) == 2:
+            audio_txt = "".join(section['quotes'])
+        audio_txt = audio_txt.replace('\n', '')
+        path = generate_three_layout_video(
+            audio_txt,
+            section['images'],
+            section['quotes'],
+            section['title'],
+            str(idx), True)
+        paths.append(path)
+    logger.info(f"paths={paths}")
+
 
 def test_generate_one():
     generate_three_layout_video(
