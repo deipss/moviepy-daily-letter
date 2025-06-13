@@ -9,13 +9,14 @@ from logging_config import logger
 import markdown
 import json
 import time
+import numpy as np
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 BACKGROUND_IMAGE_PATH = "temp/generated_background.png"
 GLOBAL_WIDTH = 1920
 GLOBAL_HEIGHT = 1080
-GAP = int(GLOBAL_WIDTH * 0.04)
+GAP = int(GLOBAL_WIDTH * 0.03)
 INNER_WIDTH = GLOBAL_WIDTH - GAP
 INNER_HEIGHT = GLOBAL_HEIGHT - GAP
 W_H_RADIO = "{:.2f}".format(GLOBAL_WIDTH / GLOBAL_HEIGHT)
@@ -40,11 +41,11 @@ def build_end_path():
 
 
 def build_video_path(idx: str, name: str):
-    return os.path.join(MATERIAL_PATH, idx, 'video_' + name + '.mp4')
+    return os.path.join(MATERIAL_PATH, idx, 'temp', 'video_' + name + '.mp4')
 
 
 def build_audio_path(idx: str, name: str):
-    return os.path.join(MATERIAL_PATH, idx, 'audio_' + name + '.mp3')
+    return os.path.join(MATERIAL_PATH, idx, 'temp', 'audio_' + name + '.mp3')
 
 
 def build_video_img_path(idx: str, img_name: str):
@@ -54,6 +55,7 @@ def build_video_img_path(idx: str, img_name: str):
 def build_letters_json_path():
     return os.path.join('letters', "letters.json")
 
+
 def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, border_color=MAIN_COLOR,
                               bg_color=MAIN_BG_COLOR):
     # 创建一个新的图像
@@ -61,8 +63,8 @@ def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, border_c
     draw = ImageDraw.Draw(image)
 
     # 计算边框宽度(1%的宽度)
-    border_width = GAP * 1.5
-
+    border_width = GAP
+    logger.info(f'bg_color = {bg_color}')
     # 绘制圆角矩形(内部灰白色)
     draw.rounded_rectangle(
         [(border_width, border_width), (width - border_width, height - border_width)],
@@ -75,20 +77,6 @@ def generate_background_image(width=GLOBAL_WIDTH, height=GLOBAL_HEIGHT, border_c
 
 def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, line_height_ratio=1.5,
                                   start_size=72):
-    """
-    计算适合文本框的字体大小和每行字数
-
-    参数:
-    text (str): 要显示的文本
-    box_width (int): 文本框宽度（像素）
-    box_height (int): 文本框高度（像素）
-    font_ratio (float): 字体大小与平均字符宽度的比例系数
-    line_height_ratio (float): 行高与字体大小的比例系数
-    start_size (int): 开始尝试的最大字体大小
-
-    返回:
-    dict: 包含计算结果的字典，键为 'font_size' 和 'chars_per_line'
-    """
     # 从最大字体开始尝试，逐步减小直到文本适应文本框
     for font_size in range(start_size, 0, -1):
         # 计算每个字符的平均宽度和行高
@@ -111,14 +99,44 @@ def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, l
     logger.warning(f"无法生成适合的文本框，请检查文本框大小是否正确,返回了默认值40和所有字符")
     return 40, len(text)
 
+
+def generate_mask_announcer(duration):
+    # 加载原视频
+    video = VideoFileClip("assets/announcer_man.mp4").with_position(('center', GLOBAL_HEIGHT * 0.15)).resized(
+        0.7).with_duration(duration)
+
+    # 获取视频尺寸
+    w, h = video.size
+    cx, cy = w // 2, h // 2  # 圆心坐标
+    radius = min(w, h) // 2  # 圆的半径，可自定义
+
+    # 创建遮罩层（mask clip）
+    def make_circle_mask(get_frame, t):
+        frame = get_frame(t)
+        mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=float)
+
+        Y, X = np.ogrid[:frame.shape[0], :frame.shape[1]]
+        dist_from_center = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2)
+        mask[dist_from_center <= radius] = 1.0  # 圆形区域设为1，其余为0
+        return mask
+
+    # 创建带遮罩的视频剪辑
+    masked_clip = video.with_mask(VideoClip(
+        frame_function=lambda t: make_circle_mask(video.get_frame, t)
+    ))
+    return masked_clip
+
+
 def generate_audio(text: str, output_file: str = "audio.wav", is_preview=False) -> None:
     if os.path.exists(output_file) and not REWRITE and not is_preview:
         logger.warning(f"{output_file}已存在，跳过生成音频。")
         return
     logger.info(f"{output_file}开始生成音频 is_preview={is_preview}: {text}")
     rate = 300 if is_preview else 50
-    sh = f'edge-tts --voice zh-CN-YunjianNeural --text "{text}" --write-media {output_file} --rate="+{rate}%"'
+    sh = f'edge-tts  --voice zh-CN-YunjianNeural --text "{text}" --write-media {output_file} --rate=+{rate}%'
     os.system(sh)
+
+
 def generate_video_end(is_preview=False):
     output_path = build_end_path()
     if os.path.exists(output_path) and not REWRITE and not is_preview:
@@ -128,7 +146,9 @@ def generate_video_end(is_preview=False):
     bg_clip = ImageClip(BACKGROUND_IMAGE_PATH)
     audio_path = build_today_end_audio_path()
 
-    generate_audio("今天的分享，至此结束，青山不老，绿水常流。我们下期见。", audio_path, is_preview)
+    generate_audio(
+        '''今天的分享，至此结束。。。青山不老，绿水常流。。我们。。。下期见。''',
+        audio_path, is_preview)
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
 
@@ -144,12 +164,10 @@ def generate_video_end(is_preview=False):
         stroke_color='black',
         stroke_width=2
     ).with_duration(duration).with_position(('center', GLOBAL_HEIGHT * 0.7))
-
-    lady = (VideoFileClip('assets/announcer_man.mp4').with_duration(duration)
-            .with_position((GLOBAL_WIDTH * 0.38, GLOBAL_HEIGHT * 0.17)).resized(0.7))
+    announcer = generate_mask_announcer(duration)
 
     # 合成最终视频
-    final_clip = CompositeVideoClip([bg_clip, txt_clip, lady], size=bg_clip.size)
+    final_clip = CompositeVideoClip([bg_clip, txt_clip, announcer], size=bg_clip.size)
     if is_preview:
         final_clip.preview()
     else:
@@ -201,6 +219,7 @@ def generate_three_layout_video(audio_txt,
         logger.warning(f"{video_path}已存在，跳过生成视频。")
         return video_path
     # 合成最终视频
+    os.makedirs(os.path.dirname(video_path), exist_ok=True)
     image_clip_list = []
     # 计算各区域尺寸
     title_height = int(INNER_HEIGHT * 0.08)
@@ -237,7 +256,7 @@ def generate_three_layout_video(audio_txt,
             interline=font_size // 2,
             font_size=font_size,
             color=MAIN_COLOR,
-            font='./font/simhei.ttf',
+            font='./font/GenYoMinTW-Bold.ttf',
             text_align='left',
             size=(box_w, box_h),
             method='caption',
@@ -289,8 +308,8 @@ def generate_three_layout_video(audio_txt,
         alr0 = quote_list[0]
         alr1 = quote_list[1]
         font_size, chars_per_line = calculate_font_size_and_lines(alr, box_w, box_h)
-        alr0 = "    " + alr0.replace('\n', '')
-        alr1 = "    " + alr1.replace('\n', '')
+        alr0 = "·" + alr0.replace('\n', '')
+        alr1 = "·" + alr1.replace('\n', '')
         alr = '\n'.join([alr0[i:i + chars_per_line] for i in range(0, len(alr0), chars_per_line)])
         alr += '\n'
         alr += '\n'.join([alr1[i:i + chars_per_line] for i in range(0, len(alr1), chars_per_line)])
@@ -334,8 +353,6 @@ def generate_three_layout_video(audio_txt,
     execution_time = time.time() - start_time  # 计算执行时间
     logger.info(f"{video_path}生成总耗时: {execution_time:.2f} 秒")
     return video_path
-
-
 
 
 # 新增函数：处理 letters.json 文件
@@ -405,9 +422,9 @@ def parse_markdown_sections(input_file):
                 if img:
                     section["images"].append(img["src"])
                 else:
-                    section["texts"].append(el.get_text().strip())
+                    section["texts"].append(el.get_text().strip().replace('\n', '').replace(' ', ''))
             elif el.name == "blockquote":
-                section["quotes"].append(el.get_text().strip())
+                section["quotes"].append(el.get_text().strip().replace('\n', '').replace(' ', ''))
 
         result.append(section)
 
@@ -452,6 +469,7 @@ def test_generate_video_all():
         if len(section['images']) == 2:
             audio_txt = "".join(section['quotes'])
         audio_txt = audio_txt.replace('\n', '').replace(' ', '')
+        print(audio_txt)
         path = generate_three_layout_video(
             audio_txt,
             section['images'],
