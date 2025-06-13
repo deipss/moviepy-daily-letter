@@ -550,7 +550,7 @@ def init_param():
 if __name__ == "__main__":
     logger.info("=======================开始执行=========================")
     init_param()
-
+    start = time.time()
     parser = argparse.ArgumentParser(description="视频生成工具")
     parser.add_argument("--rewrite", type=bool, default=False, help="是否重写")
     args = parser.parse_args()
@@ -563,3 +563,4 @@ if __name__ == "__main__":
         process_letters_json()
     except Exception as e:
         logger.error(f"生成时异常，{e}", exc_info=True)
+    logger.info(f"=======================执行完毕，耗时{time.time() - start}秒=========================")
