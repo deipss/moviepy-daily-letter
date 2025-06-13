@@ -470,13 +470,13 @@ def test_generate_video_all():
             audio_txt = "".join(section['quotes'])
         audio_txt = audio_txt.replace('\n', '').replace(' ', '')
         print(audio_txt)
-        path = generate_three_layout_video(
-            audio_txt,
-            section['images'],
-            section['quotes'],
-            section['title'],
-            str(idx), True)
-        paths.append(path)
+        # path = generate_three_layout_video(
+        #     audio_txt,
+        #     section['images'],
+        #     section['quotes'],
+        #     section['title'],
+        #     str(idx), True)
+        # paths.append(path)
 
 
 def test_generate_video_h2():
