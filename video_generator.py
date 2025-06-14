@@ -223,7 +223,7 @@ def generate_three_layout_video(audio_txt,
     image_clip_list = []
     # 计算各区域尺寸
     title_height = int(INNER_HEIGHT * 0.08)
-    top_height = int(INNER_HEIGHT * 0.8)
+    top_height = int(INNER_HEIGHT * 0.75)
     bottom_height = INNER_HEIGHT - top_height - title_height
     logger.info(f"title_height={title_height} - top_height={top_height} - bottom_height={bottom_height} ")
 
