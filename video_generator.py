@@ -29,7 +29,7 @@ REWRITE = False
 
 
 def build_video_final_path(idx: str):
-    return os.path.join('final_videos', idx + '_' + VIDEO_FILE_NAME)
+    return os.path.join('final_videos_l', idx + '_' + VIDEO_FILE_NAME)
 
 
 def build_today_end_audio_path():
@@ -94,7 +94,8 @@ def calculate_font_size_and_lines(text, box_width, box_height, font_ratio=1.0, l
 
         # 如果高度符合要求，返回当前字体大小和每行字符数
         if total_height <= box_height:
-            return font_size, chars_per_line
+            logger.info(f'font_size={font_size} chars_per_line={chars_per_line}')
+            return min(font_size,60), chars_per_line
 
     logger.warning(f"无法生成适合的文本框，请检查文本框大小是否正确,返回了默认值40和所有字符")
     return 40, len(text)
@@ -132,7 +133,7 @@ def generate_audio(text: str, output_file: str = "audio.wav", is_preview=False) 
         logger.warning(f"{output_file}已存在，跳过生成音频。")
         return
     logger.info(f"{output_file}开始生成音频 is_preview={is_preview}: {text}")
-    rate = 300 if is_preview else 50
+    rate = 500 if is_preview else 60
     sh = f'edge-tts  --voice zh-CN-YunjianNeural --text "{text}" --write-media {output_file} --rate=+{rate}%'
     os.system(sh)
 
@@ -223,7 +224,7 @@ def generate_three_layout_video(audio_txt,
     image_clip_list = []
     # 计算各区域尺寸
     title_height = int(INNER_HEIGHT * 0.08)
-    top_height = int(INNER_HEIGHT * 0.75)
+    top_height = int(INNER_HEIGHT * 0.65)
     bottom_height = INNER_HEIGHT - top_height - title_height
     logger.info(f"title_height={title_height} - top_height={top_height} - bottom_height={bottom_height} ")
 
@@ -435,13 +436,14 @@ def generate_one_story_video(idx=1):
     sections = parse_markdown_sections(f'material/{idx}/script.md')
     paths = []
     for i, section in enumerate(sections):
+        section['quotes'] = [q.replace('\n', '').replace(' ', '') for q in section['quotes']]
+        section['texts'] = [q.replace('\n', '').replace(' ', '') for q in section['texts']]
         audio_txt = ""
         if len(section['images']) == 1:
             audio_txt = "".join(section['texts'])
         if len(section['images']) == 2:
             audio_txt = "".join(section['quotes'])
         audio_txt = audio_txt.replace('\n', '').replace(' ', '')
-        section['quotes'] = [q.replace('\n', '').replace(' ', '') for q in section['quotes']]
         path = generate_three_layout_video(
             audio_txt,
             section['images'],
@@ -464,26 +466,30 @@ def test_generate_video_all():
     paths = []
     for i, section in enumerate(sections):
         audio_txt = ""
+        section['quotes'] = [q.replace('\n', '').replace(' ', '') for q in section['quotes']]
+        section['texts'] = [q.replace('\n', '').replace(' ', '') for q in section['texts']]
         if len(section['images']) == 1:
             audio_txt = "".join(section['texts'])
         if len(section['images']) == 2:
             audio_txt = "".join(section['quotes'])
         audio_txt = audio_txt.replace('\n', '').replace(' ', '')
-        print(audio_txt)
-        # path = generate_three_layout_video(
-        #     audio_txt,
-        #     section['images'],
-        #     section['quotes'],
-        #     section['title'],
-        #     str(idx), True)
-        # paths.append(path)
+        path = generate_three_layout_video(
+            audio_txt,
+            section['images'],
+            section['quotes'],
+            section['title'],
+            str(idx), True)
+        paths.append(path)
+    logger.info(f"paths={paths}")
+    paths.append(generate_video_end())
+    combine_all_videos_with_bg(paths, build_video_final_path(str(idx)))
 
 
 def test_generate_video_h2():
     idx = 1
     sections = parse_markdown_sections(f'material/{idx}/script.md')
     paths = []
-    for i, section in enumerate(sections[4:5]):
+    for i, section in enumerate(sections):
         audio_txt = ""
         if len(section['images']) == 1:
             audio_txt = "".join(section['texts'])
@@ -539,8 +545,8 @@ import argparse
 def init_param():
     if not os.path.exists('temp'):
         os.mkdir('temp')
-    if not os.path.exists('final_videos'):
-        os.mkdir('final_videos')
+    if not os.path.exists('final_videos_l'):
+        os.mkdir('final_videos_l')
     if not os.path.exists('material'):
         os.mkdir('material')
     logger.info(
